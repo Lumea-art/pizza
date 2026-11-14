@@ -3,8 +3,10 @@
  *
  * The cheapest compaction tier: replace large, old tool results with a short
  * placeholder and clear stale tool-call argument payloads, while keeping the
- * user/assistant message and tool-call structure intact. Applied at projection
- * time — events in the store are never modified.
+ * user/assistant message and tool-call structure intact. Failed results and
+ * their arguments are preserved: the error is usually the reason the agent
+ * still needs the observation. Applied at projection time — events in the
+ * store are never modified.
  */
 
 import type { ContentBlock, EventBase } from "../event-store/types.js";
@@ -49,6 +51,10 @@ export function maskToolResultEvents(
 	return events.map((event) => {
 		if (event.type !== "TOOL_EXECUTION_END" || event.sequence >= beforeSequence) return event;
 		const payload = event.payload as ToolExecutionEndEvent["payload"];
+		// Errors are the observations an agent is most likely to need later:
+		// the failing assertion, command stderr, or stack trace. Clearing them
+		// saves tokens but can silently erase the only explanation for a bug.
+		if (payload.is_error) return event;
 		const chars = toolResultChars(payload.result ?? []);
 		if (chars < minChars) return event;
 		const text = buildPlaceholder(payload.tool_name, calls.get(payload.tool_call_id), chars);
@@ -81,7 +87,7 @@ export function maskToolCallArgumentEvents(
 			const call = block as { type?: string; id?: string; tool_call_id?: string; arguments?: unknown };
 			if (call.type !== "tool_call" && call.type !== "toolCall") return block;
 			const id = call.id ?? call.tool_call_id;
-			if (!id || !completed.has(String(id))) return block;
+			if (!id || completed.get(String(id)) !== false) return block;
 			const args = call.arguments as Record<string, unknown> | undefined;
 			if (!args) return block;
 			const before = JSON.stringify(args) ?? "";
@@ -95,12 +101,13 @@ export function maskToolCallArgumentEvents(
 	});
 }
 
-function collectCompletedToolCalls(events: EventBase[], beforeSequence: number): Set<string> {
-	const completed = new Set<string>();
+function collectCompletedToolCalls(events: EventBase[], beforeSequence: number): Map<string, boolean> {
+	const completed = new Map<string, boolean>();
 	for (const event of events) {
 		if (event.type !== "TOOL_EXECUTION_END" || event.sequence >= beforeSequence) continue;
-		const id = (event.payload as ToolExecutionEndEvent["payload"]).tool_call_id;
-		if (id) completed.add(String(id));
+		const payload = event.payload as ToolExecutionEndEvent["payload"];
+		const id = payload.tool_call_id;
+		if (id) completed.set(String(id), payload.is_error === true);
 	}
 	return completed;
 }
