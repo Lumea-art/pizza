@@ -85,8 +85,10 @@ export function formatFileOperations(readFiles: string[], modifiedFiles: string[
 // Message Serialization
 // ============================================================================
 
-/** Maximum characters for a tool result in serialized summaries. */
+/** Maximum characters for a successful tool result in serialized summaries. */
 const TOOL_RESULT_MAX_CHARS = 2000;
+/** Errors get more room: the failure detail is usually the point of the turn. */
+const TOOL_RESULT_ERROR_MAX_CHARS = 6000;
 const ASSISTANT_THINKING_MAX_CHARS = 2000;
 const TOOL_CALL_ARG_VALUE_MAX_CHARS = 500;
 const TOOL_CALL_ARG_MAX_CHARS = 2000;
@@ -175,7 +177,9 @@ export function serializeConversation(messages: Message[]): string {
 				.map((c) => c.text)
 				.join("");
 			if (content) {
-				parts.push(`[Tool result]: ${truncateForSummary(content, TOOL_RESULT_MAX_CHARS)}`);
+				const maxChars = msg.isError ? TOOL_RESULT_ERROR_MAX_CHARS : TOOL_RESULT_MAX_CHARS;
+				const label = msg.isError ? "[Tool error]" : "[Tool result]";
+				parts.push(`${label}: ${truncateForSummary(content, maxChars)}`);
 			}
 		}
 	}
