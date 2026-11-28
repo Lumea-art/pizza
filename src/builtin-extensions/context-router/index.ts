@@ -25,11 +25,12 @@ import {
 	selectRecentContext,
 	type ContextSelection,
 } from "../../core/context/goal-pins.js";
+import { auditContext } from "../../core/context/context-audit.js";
 
 export const CONTEXT_ROUTER_EXTENSION_ID = "context-router";
 
 interface ContextArgs {
-	subcommand: "pins" | "recent" | "path" | "route" | "help";
+	subcommand: "pins" | "recent" | "path" | "route" | "audit" | "help";
 	path?: string;
 	query?: string;
 	budget?: number;
@@ -43,11 +44,12 @@ const USAGE = [
 	"_context recent [--budget N] [--json]",
 	"_context path <path> [--budget N] [--json]",
 	"_context route <query> [--json]",
+	"_context audit [--budget N] [--json]",
 ].join("\n");
 
 function parseArgs(args: string[]): ContextArgs {
 	const subcommand = (args[0] ?? "help").toLowerCase();
-	if (!["pins", "recent", "path", "route", "help"].includes(subcommand)) {
+	if (!["pins", "recent", "path", "route", "audit", "help"].includes(subcommand)) {
 		throw new Error(`Unknown _context subcommand: ${subcommand}\n\n${USAGE}`);
 	}
 	const parsed: ContextArgs = { subcommand: subcommand as ContextArgs["subcommand"] };
@@ -97,6 +99,7 @@ export const contextCommand: CliCommandDefinition<ContextArgs> = {
 	usage: USAGE,
 	promptGuidelines: [
 		"Use _context pins when you need early user constraints or decisions, and _context recent for next-action work.",
+		"Use _context audit to see whether early pins are absent from the recent window before choosing a strategy.",
 	],
 	parseArguments: parseArgs,
 	classify: () => ({ category: "file_read", description: "Inspect context selection" }),
@@ -134,6 +137,13 @@ export const contextCommand: CliCommandDefinition<ContextArgs> = {
 					? selectGoalPins(events, { tokenBudget: budget, limit })
 					: selectRecentContext(events, { tokenBudget: budget });
 				return asResult(selection, params.json);
+			}
+			case "audit": {
+				const audit = auditContext(events, { pinsBudget: budget, recentBudget: budget });
+				return {
+					content: [{ type: "text", text: params.json ? JSON.stringify(audit, null, 2) : audit.markdown }],
+					details: audit,
+				};
 			}
 			default:
 				return { content: [{ type: "text", text: USAGE }] };

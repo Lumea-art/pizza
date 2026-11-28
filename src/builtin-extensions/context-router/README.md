@@ -9,12 +9,14 @@ _context pins [--budget N] [--limit N] [--json]
 _context recent [--budget N] [--json]
 _context path <path> [--budget N] [--json]
 _context route <query> [--json]
+_context audit [--budget N] [--json]
 ```
 
 - `pins`: explicit user constraints / early decisions
 - `recent`: latest observations for next-action work
 - `path`: file-scoped long-range evidence
 - `route`: deterministic intent router (`pins` for constraint/plan/why, otherwise `recent`)
+- `audit`: compare GoalPins vs recent and flag early constraints that are absent from the recent window
 
 ## Algorithm
 
